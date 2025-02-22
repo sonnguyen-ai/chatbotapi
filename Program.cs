@@ -6,7 +6,6 @@ using Microsoft.OpenApi.Models;
 var builder = WebApplication.CreateBuilder(args);
 string connectionString = builder.Configuration["CosmosDB:ConnectionString"];
 string databaseId = builder.Configuration["CosmosDB:DatabaseId"];
-string containerMessageId = builder.Configuration["CosmosDB:ContainerMessageId"];
 
 // Register CosmosClient
 builder.Services.AddSingleton(s => new CosmosClient(connectionString));
@@ -21,9 +20,19 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c=>{
+builder.Services.AddSwaggerGen(c =>
+{
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "Minimal API Gateway 123", Version = "v1" });
     c.OperationFilter<AddRequiredHeaderParameter>();
+});
+
+builder.Services.AddSingleton(c =>
+{
+    var cosmosClient = c.GetService<CosmosClient>();
+    var settingProvider = new SettingProvider();
+
+    settingProvider.RefreshData(cosmosClient).GetAwaiter().GetResult();
+    return settingProvider;
 });
 
 builder.Services.AddHttpClient();
@@ -44,49 +53,21 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 // GET: Retrieve Setting by partitionKey
-app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosClient, HttpResponse httpResponse) =>
+app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider ) =>
 {
-    var container = cosmosClient.GetContainer(databaseId, "settings");
-    var query = "SELECT * FROM c";
-
-    var iterator = container.GetItemQueryIterator<Setting>(query, requestOptions: new QueryRequestOptions
-    {
-        PartitionKey = new PartitionKey(tenantId)
-    });
-
-    var response = await iterator.ReadNextAsync();
-    if (response.StatusCode != System.Net.HttpStatusCode.OK)
-    {
-        return Results.NotFound();
-    }
-
-    var settingsResponse = new List<SettingResponse>();
-
-    foreach (var setting in response)
-    {
-        settingsResponse.Add(new SettingResponse
-        {
-            Id = setting.Id,
-            TenantId = setting.TenantId,
-            Configuration = setting.Configuration
-        });
-    }
-
-
-    httpResponse.Headers["Cache-Control"] = "public, max-age=86400";
-    return Results.Ok(settingsResponse.First());
+    var setting = provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+    httpResponse.Headers["Access-Control-Max-Age"] = "public, max-age=86400";
+    return Results.Ok(setting);
 });
 
-
-// GET: Retrieve Product by partitionKey
-app.MapGet("/messages/{tenderId}", async (string tenderId, CosmosClient cosmosClient) =>
+app.MapGet("/messages/{tenantId}", async (string tenantId, CosmosClient cosmosClient) =>
 {
-    var container = cosmosClient.GetContainer(databaseId, containerMessageId);
+    var container = cosmosClient.GetContainer(databaseId, "messages");
     var query = "SELECT * FROM c";
 
     var iterator = container.GetItemQueryIterator<Message>(query, requestOptions: new QueryRequestOptions
     {
-        PartitionKey = new PartitionKey(tenderId)
+        PartitionKey = new PartitionKey(tenantId)
     });
 
     var response = await iterator.ReadNextAsync();
@@ -114,16 +95,20 @@ app.MapGet("/messages/{tenderId}", async (string tenderId, CosmosClient cosmosCl
 app.MapGet("/ping", () => Results.Ok("Pong!"));
 
 // POST: gateway
-
-app.MapPost("/gateway/{*path}", async (string path, HttpClient client, HttpContext context) =>
+app.MapPost("/gateway/messages/llm/{tenantId}/", async (string tenantId, HttpClient client, HttpContext context, SettingProvider provider) =>
 {
-    var baseUrl = context.Request.Headers["BaseUrl"].ToString();
-    var model = context.Request.Headers["Model"].ToString();
-    var key = context.Request.Headers["Key"].ToString();
+        //setting by tenantId
+    var setting = provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
+
+    var baseUrl = setting.Configuration.BaseUrl;
+    var url = setting.Configuration.Url;
+    var model = setting.Configuration.Model;
+    var key = setting.Configuration.Key;
 
     var content = await new StreamContent(context.Request.Body).ReadAsStringAsync();
     var requestContent = new StringContent(content, System.Text.Encoding.UTF8, context.Request.ContentType);
-    var postUrl = Path.Combine(baseUrl, path).Replace("{0}", model).Replace("{1}", key);
+    var postUrl = $"{baseUrl}{url}".Replace("{0}", model).Replace("{1}", key);
+
     // Forward the POST request to the backend service
     var response = await client.PostAsync(postUrl, requestContent);
     var responseContent = await response.Content.ReadAsStringAsync();
@@ -131,36 +116,4 @@ app.MapPost("/gateway/{*path}", async (string path, HttpClient client, HttpConte
     return Results.Content(responseContent, response.Content.Headers.ContentType?.ToString(), System.Text.Encoding.UTF8, (int)response.StatusCode);
 }).WithName("ForwardPostToGemini");
 
-
-app.MapPost("/messages", async (MessageRequest messageRequest, CosmosClient cosmosClient, HttpRequest request) =>
-{
-    var tenantId = request.Headers["tenantId"];
-    var roomId = request.Headers["roomId"];
-
-    if (string.IsNullOrEmpty(tenantId) || string.IsNullOrEmpty(roomId))
-    {
-        return Results.BadRequest();
-    }
-
-    var container = cosmosClient.GetContainer(databaseId, containerMessageId);
-    var message = new Message
-    {
-        Id = Guid.NewGuid(),
-        RoomId = roomId,
-        Payload = new Payload
-        {
-            Text = messageRequest.parts.First().Text,
-            HideInChat = false,
-            Role = messageRequest.Role
-        }
-    };
-
-    var response = await container.CreateItemAsync(message, new PartitionKey(message.RoomId));
-    if (response.StatusCode != System.Net.HttpStatusCode.Created)
-    {
-        return Results.BadRequest();
-    }
-
-    return Results.Created($"/messages/{message.RoomId}", message);
-});
 app.Run();
