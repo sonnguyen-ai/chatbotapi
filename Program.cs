@@ -1,11 +1,26 @@
 
+using System.IO.Compression;
 using chatminimalapi.DTOs;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 string connectionString = builder.Configuration["CosmosDB:ConnectionString"];
 string databaseId = builder.Configuration["CosmosDB:DatabaseId"];
+
+builder.Services.AddResponseCompression(options =>
+{
+    options.Providers.Add<GzipCompressionProvider>();
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.EnableForHttps = true; // Enable for HTTPS requests
+});
+
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.SmallestSize; // Or Optimal
+});
+
 
 // Register CosmosClient
 builder.Services.AddSingleton(s => new CosmosClient(connectionString));
@@ -39,6 +54,7 @@ builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
+app.UseResponseCompression();
 
 if (app.Environment.IsDevelopment())
 {
