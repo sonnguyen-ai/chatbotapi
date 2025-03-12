@@ -158,7 +158,7 @@ app.MapGet("/messages/{tenantId}", async (string tenantId, CosmosClient cosmosCl
     return Results.Ok(messagesResponse);
 });
 
-app.MapGet("/ping", () => Results.Ok("Pong!"));
+app.MapGet("/ping", () => Results.Ok("Pong update welcome message!"));
 
 // POST: gateway
 app.MapPost("/gateway/messages/llm/{tenantId}/", async (string tenantId, HttpClient client, HttpContext context, SettingProvider provider) =>
