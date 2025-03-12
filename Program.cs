@@ -1,6 +1,8 @@
 
 using System.IO.Compression;
+using System.Text;
 using chatminimalapi.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
@@ -55,26 +57,74 @@ builder.Services.AddHttpClient();
 var app = builder.Build();
 
 app.UseResponseCompression();
-
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(options =>
+app.Use(async (context, next) =>
     {
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Minimal API Gateway v1");
+        if (context.Request.Path.StartsWithSegments("/swagger"))
+        {
+            string authHeader = context.Request.Headers["Authorization"];
+            if (authHeader != null && authHeader.StartsWith("Basic "))
+            {
+                // Get credentials from header
+                var encodedUsernamePassword = authHeader.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[1]?.Trim();
+                var decodedUsernamePassword = Encoding.UTF8.GetString(Convert.FromBase64String(encodedUsernamePassword));
+                var username = decodedUsernamePassword.Split(':', 2)[0];
+                var password = decodedUsernamePassword.Split(':', 2)[1];
+
+                // Get configured credentials
+                var configuredUsername = builder.Configuration["SwaggerUI:Username"];
+                var configuredPassword = builder.Configuration["SwaggerUI:Password"];
+
+                if (username == configuredUsername && password == configuredPassword)
+                {
+                    await next.Invoke();
+                    return;
+                }
+            }
+
+            // Return authentication challenge
+            context.Response.Headers["WWW-Authenticate"] = "Basic";
+            context.Response.StatusCode = 401;
+            return;
+        }
+
+        await next.Invoke();
     });
-}
+
+app.UseSwagger();
+app.UseSwaggerUI(options =>
+{
+    options.SwaggerEndpoint("/swagger/v1/swagger.json", "Minimal API Gateway v1");
+    if (!app.Environment.IsDevelopment())
+    {
+        options.ConfigObject.AdditionalItems["syntaxHighlight"] = new Dictionary<string, object>
+        {
+            ["activated"] = false
+        };
+    }
+});
+
+
+
 
 // Use CORS
 app.UseCors("AllowAll");
 
 // GET: Retrieve Setting by partitionKey
-app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider ) =>
+app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider) =>
 {
     var setting = provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
     httpResponse.Headers["Access-Control-Max-Age"] = "public, max-age=86400";
     return Results.Ok(setting);
 });
+
+
+app.MapGet("/settings/refresh", async (CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider) =>
+{
+    await provider.RefreshData(cosmosClient);
+
+    return Results.Ok("refreshed!");
+});
+
 
 app.MapGet("/messages/{tenantId}", async (string tenantId, CosmosClient cosmosClient) =>
 {
@@ -113,7 +163,7 @@ app.MapGet("/ping", () => Results.Ok("Pong!"));
 // POST: gateway
 app.MapPost("/gateway/messages/llm/{tenantId}/", async (string tenantId, HttpClient client, HttpContext context, SettingProvider provider) =>
 {
-        //setting by tenantId
+    //setting by tenantId
     var setting = provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
 
     var baseUrl = setting.Configuration.BaseUrl;
