@@ -21,8 +21,15 @@ public class Configuration
     public string Url { get; set; }
     public string Cors { get; set; }
     public string instruction { get; set; }
+    public Colors Colors { get; set; }
     [JsonPropertyName("prompt")]
     public string Prompt { get; set; }
+}
+
+public class Colors
+{
+    public string MainColor { get; set; }
+    public string SecondColor { get; set; }
 }
 
 public class SettingResponse : Setting
