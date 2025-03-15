@@ -9,7 +9,15 @@
             "type": "dotnet",
             "request": "launch",
             "projectPath": "${workspaceFolder}\\chatminimalapi.csproj",
-            "launchConfigurationId": "TargetFramework=;https"
+            "launchConfigurationId": "TargetFramework=;https",
+            
+        },
+        {
+            "name": "C#: chatminimalapi [http]",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}\\chatminimalapi.csproj",
+            "launchConfigurationId": "TargetFramework=;http",
         }
     ]
 }
