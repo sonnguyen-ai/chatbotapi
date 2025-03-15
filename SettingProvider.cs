@@ -1,38 +1,18 @@
 using chatminimalapi.DTOs;
-using Microsoft.Azure.Cosmos;
+using chatminimalapi.Repositories;
 
-public class SettingProvider{
-    public List<Setting> settings { get; set; }
+public class SettingProvider
+{
+    private readonly ISettingsRepository _settingsRepository;
+    public List<Setting> settings { get; private set; } = new List<Setting>();
 
-    public async Task RefreshData(CosmosClient cosmosClient)
+    public SettingProvider(ISettingsRepository settingsRepository)
     {
-        settings = await GetSettings(cosmosClient);
+        _settingsRepository = settingsRepository;
     }
 
-    private async Task<List<Setting>> GetSettings(CosmosClient cosmosClient)
+    public async Task RefreshData()
     {
-        var container = cosmosClient.GetContainer("chatbot", "settings");
-        var query = "SELECT * FROM c";
-
-        var iterator = container.GetItemQueryIterator<Setting>(query);
-
-        var response = await iterator.ReadNextAsync();
-        var settingsResponse = new List<Setting>();
-        if (response.StatusCode != System.Net.HttpStatusCode.OK)
-        {
-            return settingsResponse;
-        }
-
-        foreach (var setting in response)
-        {
-            settingsResponse.Add(new Setting
-            {
-                Id = setting.Id,
-                TenantId = setting.TenantId,
-                Configuration = setting.Configuration
-            });
-        }
-
-        return settingsResponse;
+        settings = await _settingsRepository.GetAllSettingsAsync();
     }
 }

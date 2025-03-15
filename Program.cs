@@ -2,13 +2,13 @@
 using System.IO.Compression;
 using System.Text;
 using chatminimalapi.DTOs;
+using chatminimalapi.Repositories;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
-string connectionString = builder.Configuration["CosmosDB:ConnectionString"];
 string databaseId = builder.Configuration["CosmosDB:DatabaseId"];
 
 builder.Services.AddResponseCompression(options =>
@@ -24,8 +24,12 @@ builder.Services.Configure<GzipCompressionProviderOptions>(options =>
 });
 
 
-// Register CosmosClient
-builder.Services.AddSingleton(s => new CosmosClient(connectionString));
+// Register CosmosClient only in non-development environments
+if (!builder.Environment.IsDevelopment())
+{
+    string connectionString = builder.Configuration["CosmosDB:ConnectionString"];
+    builder.Services.AddSingleton(s => new CosmosClient(connectionString));
+}
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -43,12 +47,29 @@ builder.Services.AddSwaggerGen(c =>
     c.OperationFilter<AddRequiredHeaderParameter>();
 });
 
-builder.Services.AddSingleton(c =>
+// Register the appropriate repository based on environment
+builder.Services.AddSingleton<ISettingsRepository>(sp =>
 {
-    var cosmosClient = c.GetService<CosmosClient>();
-    var settingProvider = new SettingProvider();
+    if (builder.Environment.IsDevelopment())
+    {
+        // Use InMemorySettingsRepository with sample data in development
+        return new InMemorySettingsRepository(chatminimalapi.Data.DevelopmentSettings.GetSampleSettings());
+    }
+    else
+    {
+        // Use CosmosSettingsRepository in other environments
+        var cosmosClient = sp.GetRequiredService<CosmosClient>();
+        var databaseId = builder.Configuration["CosmosDB:DatabaseId"] ?? "chatbot";
+        return new CosmosSettingsRepository(cosmosClient, databaseId);
+    }
+});
 
-    settingProvider.RefreshData(cosmosClient).GetAwaiter().GetResult();
+// Register the SettingProvider
+builder.Services.AddSingleton(sp =>
+{
+    var repository = sp.GetRequiredService<ISettingsRepository>();
+    var settingProvider = new SettingProvider(repository);
+    settingProvider.RefreshData().GetAwaiter().GetResult();
     return settingProvider;
 });
 
@@ -110,7 +131,7 @@ app.UseSwaggerUI(options =>
 app.UseCors("AllowAll");
 
 // GET: Retrieve Setting by partitionKey
-app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider) =>
+app.MapGet("/settings/{tenantId}", (string tenantId, HttpResponse httpResponse, SettingProvider provider) =>
 {
     var setting = provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
     httpResponse.Headers["Access-Control-Max-Age"] = "public, max-age=86400";
@@ -118,25 +139,16 @@ app.MapGet("/settings/{tenantId}", async (string tenantId, CosmosClient cosmosCl
 });
 
 
-app.MapGet("/settings/refresh", async (CosmosClient cosmosClient, HttpResponse httpResponse, SettingProvider provider) =>
+app.MapGet("/settings/refresh", async (HttpResponse httpResponse, SettingProvider provider) =>
 {
-    await provider.RefreshData(cosmosClient);
-
+    await provider.RefreshData();
     return Results.Ok("refreshed!");
 });
 
 
-app.MapGet("/messages/{tenantId}", async (string tenantId, CosmosClient cosmosClient) =>
+app.MapGet("/messages/{tenantId}", async (string tenantId, ISettingsRepository settingsRepository) =>
 {
-    var container = cosmosClient.GetContainer(databaseId, "messages");
-    var query = "SELECT * FROM c";
-
-    var iterator = container.GetItemQueryIterator<Message>(query, requestOptions: new QueryRequestOptions
-    {
-        PartitionKey = new PartitionKey(tenantId)
-    });
-
-    var response = await iterator.ReadNextAsync();
+    var response = await settingsRepository.GetMessagesAsync(tenantId, databaseId);
     if (response.StatusCode != System.Net.HttpStatusCode.OK)
     {
         return Results.NotFound();
@@ -159,6 +171,16 @@ app.MapGet("/messages/{tenantId}", async (string tenantId, CosmosClient cosmosCl
 });
 
 app.MapGet("/ping", () => Results.Ok("Pong update the message today!"));
+
+// Diagnostic endpoint to check which repository implementation is being used
+app.MapGet("/diagnostic/repository-type", (ISettingsRepository repository) =>
+{
+    return Results.Ok(new
+    {
+        RepositoryType = repository.GetType().Name,
+        Environment = app.Environment.EnvironmentName
+    });
+});
 
 // POST: gateway
 app.MapPost("/gateway/messages/llm/{tenantId}/", async (string tenantId, HttpClient client, HttpContext context, SettingProvider provider) =>
