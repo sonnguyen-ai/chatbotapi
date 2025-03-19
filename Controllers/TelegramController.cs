@@ -14,20 +14,17 @@ namespace TelegramBotBackend.Controllers
     [ApiController]
     public class TelegramController : ControllerBase
     {
-        private readonly ITelegramBotClient _botClient;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly SettingProvider _provider;
         private readonly TelemetryClient _telemetryClient;
 
         public TelegramController(
-            ITelegramBotClient botClient,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
             SettingProvider provider,
             TelemetryClient telemetryClient)
         {
-            _botClient = botClient;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _provider = provider;
@@ -72,6 +69,8 @@ namespace TelegramBotBackend.Controllers
             {
                 var messageToBot = await GetLlmResponse(userMessage, chatId, informationKeyParam[0], botKey);
 
+                var _botClient = new TelegramBotClient(botKey);
+
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
 
@@ -101,7 +100,7 @@ namespace TelegramBotBackend.Controllers
             var baseUrl = setting.Configuration.BaseUrl;
             var url = setting.Configuration.Url;
             var model = setting.Configuration.Model;
-            var key = botKey;
+            var key = setting.Configuration.Key;
             var prompt = setting.Configuration.Prompt;
             var instruction = setting.Configuration.instruction;
             var client = _httpClientFactory.CreateClient();
