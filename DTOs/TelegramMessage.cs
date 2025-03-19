@@ -1,8 +1,12 @@
+using Newtonsoft.Json;
+
 namespace chatminimalapi.DTOs;
 
 public class TelegramMessage
 {
-    public long ChatId { get; set; } // Changed to long to match Telegram's chat_id
+
+    [JsonProperty("message_id")]
+    public long MesageId { get; set; }
     public string? Text { get; set; }
 }
 
