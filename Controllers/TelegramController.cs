@@ -43,7 +43,7 @@ namespace TelegramBotBackend.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, string tenantId, string botKey)
+        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, [FromQuery] string tenantId, [FromQuery] string botKey)
         {
             if (update?.Message?.Text == null || update.Message.Id == 0)
                 return Ok(); // Ignore invalid updates
