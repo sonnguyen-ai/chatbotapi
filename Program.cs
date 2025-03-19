@@ -77,6 +77,7 @@ builder.Services.AddSingleton(sp =>
 });
 
 builder.Services.AddHttpClient();
+builder.Services.AddApplicationInsightsTelemetry();
 
 builder.Services.AddSingleton<ITelegramBotClient>(sp =>
     new TelegramBotClient(builder.Configuration["TelegramBot:Token"]));

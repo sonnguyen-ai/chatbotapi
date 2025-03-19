@@ -3,6 +3,8 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using chatminimalapi.DTOs;
 using System.Dynamic;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 
 namespace TelegramBotBackend.Controllers
 {
@@ -14,13 +16,20 @@ namespace TelegramBotBackend.Controllers
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly SettingProvider _provider;
+        private readonly TelemetryClient _telemetryClient;
 
-        public TelegramController(ITelegramBotClient botClient, IHttpClientFactory httpClientFactory, IConfiguration configuration, SettingProvider provider)
+        public TelegramController(
+            ITelegramBotClient botClient, 
+            IHttpClientFactory httpClientFactory, 
+            IConfiguration configuration, 
+            SettingProvider provider,
+            TelemetryClient telemetryClient)
         {
             _botClient = botClient;
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _provider = provider;
+            _telemetryClient = telemetryClient;
         }
 
         //create ping
@@ -40,12 +49,40 @@ namespace TelegramBotBackend.Controllers
             string userMessage = update.Message.Text;
             long chatId = update.Message.Chat.Id;
 
+            // Log the incoming message to Azure Application Insights
+            var properties = new Dictionary<string, string>
+            {
+                { "ChatId", chatId.ToString() },
+                { "UserMessage", userMessage },
+                { "MessageId", update.Message.MessageId.ToString() },
+                { "Username", update.Message.From?.Username ?? "unknown" }
+            };
 
+            // Log as a custom event
+            _telemetryClient.TrackEvent("TelegramMessageReceived", properties);
 
-            // _=await GetLlmResponse(llmResponse);
-            // Send response back to Telegram
-
-            await _botClient.SendTextMessageAsync(chatId, $"You said: {userMessage}");
+            try
+            {
+                // _=await GetLlmResponse(llmResponse);
+                // Send response back to Telegram
+                await _botClient.SendTextMessageAsync(chatId, $"You said: {userMessage}");
+                
+                // Log successful response
+                _telemetryClient.TrackEvent("TelegramMessageSent", properties);
+            }
+            catch (Exception ex)
+            {
+                // Log any errors that occur
+                _telemetryClient.TrackException(ex, properties);
+                
+                // You might want to log additional details about the error
+                var errorProperties = new Dictionary<string, string>(properties)
+                {
+                    { "ErrorMessage", ex.Message },
+                    { "StackTrace", ex.StackTrace }
+                };
+                _telemetryClient.TrackTrace("Error sending Telegram message", SeverityLevel.Error, errorProperties);
+            }
 
             return Ok();
         }
