@@ -10,6 +10,7 @@
     <PackageReference Include="Microsoft.Azure.Cosmos" Version="3.47.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
+    <PackageReference Include="Telegram.Bot" Version="22.4.4" />
   </ItemGroup>
 
 </Project>

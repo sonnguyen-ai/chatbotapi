@@ -42,6 +42,29 @@ public static class DevelopmentSettings
             new Setting
             {
                 Id = "2",
+                TenantId = "voiz",
+                Configuration = new Configuration
+                {
+                    Title = "Development Chat 2",
+                    WelcomeMessage = "Welcome to Development Environment 2",
+                    Max_token = "1000",
+                    Model = "gemini-1.5-flash",
+                    Key = "AIzaSyDNPlChIuTRovT1BlHwwvTepVmgoJiDg1g",
+                    BaseUrl = "https://generativelanguage.googleapis.com",
+                    Url = "/v1beta/models/{0}:generateContent?key={1}",
+                    Cors = "*",
+                    instruction = "You are in development mode - tenant 2",
+                    Colors = new Colors
+                    {
+                        MainColor = "#28a745",
+                        SecondColor = "#dc3545"
+                    },
+                    Prompt = "This is a development prompt for tenant 2"
+                }
+            },
+            new Setting
+            {
+                Id = "3",
                 TenantId = "seysolutions",
                 Configuration = new Configuration
                 {
