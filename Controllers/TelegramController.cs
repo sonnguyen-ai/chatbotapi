@@ -45,7 +45,7 @@ namespace TelegramBotBackend.Controllers
 
             // _=await GetLlmResponse(llmResponse);
             // Send response back to Telegram
-            await _botClient.SendMessage(chatId, llmResponse);
+            await _botClient.SendTextMessageAsync(chatId, $"You said: {userMessage}");
 
             return Ok();
         }
