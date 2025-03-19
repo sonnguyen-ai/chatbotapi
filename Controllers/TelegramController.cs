@@ -61,9 +61,6 @@ namespace TelegramBotBackend.Controllers
             // Log as a custom event
             _telemetryClient.TrackEvent("TelegramMessageReceived", properties);
 
-            // Process the message using the LLM API
-            // var response = await GetLlmResponse(userMessage);
-
             //send to bot
             try
             {
@@ -72,7 +69,7 @@ namespace TelegramBotBackend.Controllers
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
 
-                _telemetryClient.TrackEvent("TelegramMessageSent", new Dictionary<string,string>{
+                _telemetryClient.TrackEvent("TelegramMessageSent", new Dictionary<string, string>{
                     { "Payload", JsonConvert.SerializeObject(response) },
                 });
 
@@ -103,18 +100,69 @@ namespace TelegramBotBackend.Controllers
             var prompt = setting.Configuration.Prompt;
             var instruction = setting.Configuration.instruction;
             var client = _httpClientFactory.CreateClient();
-            var template = "{\"contents\":[{\"parts\":[{\"text\":\"{0}\"}],\"role\":\"model\"},null,{\"parts\":[{\"text\":\"{1}\"}],\"role\":\"model\"},{\"parts\":[{\"text\":\"hi\"}],\"role\":\"user\"}],\"safetySettings\":[{\"category\":\"HARM_CATEGORY_HARASSMENT\",\"threshold\":\"BLOCK_MEDIUM_AND_ABOVE\"},{\"category\":\"HARM_CATEGORY_HATE_SPEECH\",\"threshold\":\"BLOCK_MEDIUM_AND_ABOVE\"},{\"category\":\"HARM_CATEGORY_SEXUALLY_EXPLICIT\",\"threshold\":\"BLOCK_MEDIUM_AND_ABOVE\"},{\"category\":\"HARM_CATEGORY_DANGEROUS_CONTENT\",\"threshold\":\"BLOCK_MEDIUM_AND_ABOVE\"}],\"generationConfig\":{\"maxOutputTokens\":300,\"temperature\":0.7,\"topK\":1,\"topP\":0.8}}";
 
-            template = template.Replace("{0}", instruction).Replace("{1}", prompt);
+            ChatHistory.AddMessage(1234, new ChatMessage
+            {
+                Content = message,
+                Timestamp = DateTime.Now,
+                Role = "user"
+            });
 
-            var requestContent = new StringContent(template, System.Text.Encoding.UTF8, Request.ContentType);
+            var history = ChatHistory.GetHistory(1234);
+
+            var llmRequest = new LlmRequest
+            {
+                Contents = new List<Content>
+                {
+                    new Content
+                    {
+                        Parts = new List<Part> { new Part { Text = instruction } },
+                        Role = "model"
+                    },
+                    new Content
+                    {
+                        Parts = new List<Part> { new Part { Text = prompt } },
+                        Role = "model"
+                    }
+                },
+                SafetySettings = new List<SafetySetting>
+                {
+                    new SafetySetting { Category = "HARM_CATEGORY_HARASSMENT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
+                    new SafetySetting { Category = "HARM_CATEGORY_HATE_SPEECH", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
+                    new SafetySetting { Category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
+                    new SafetySetting { Category = "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" }
+                },
+                GenerationConfig = new GenerationConfig
+                {
+                    MaxOutputTokens = 300,
+                    Temperature = 0.7,
+                    TopK = 1,
+                    TopP = 0.8
+                }
+            };
+
+            history.ForEach(x =>
+            {
+                llmRequest.Contents.Add(new Content
+                {
+                    Parts = new List<Part> { new Part { Text = x.Content } },
+                    Role = x.Role
+                });
+            });
+
+            var stringObj = JsonConvert.SerializeObject(llmRequest, new JsonSerializerSettings
+            {
+                ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
+            });
+
+            var requestContent = new StringContent(stringObj, System.Text.Encoding.UTF8, Request.ContentType);
             var postUrl = $"{baseUrl}{url}".Replace("{0}", model).Replace("{1}", key);
 
             // Forward the POST request to the backend service
             var response = await client.PostAsync(postUrl, requestContent);
             if (!response.IsSuccessStatusCode)
                 return "Error getting LLM response";
-    
+
             var llmApiResponses = JsonConvert.DeserializeObject<LlmApiResponse>(await response.Content.ReadAsStringAsync());
             return llmApiResponses.Candidates[0].Content.Parts[0].Text;
         }
