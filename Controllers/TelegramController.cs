@@ -108,7 +108,7 @@ namespace TelegramBotBackend.Controllers
                 Role = "user"
             });
 
-            var history = ChatHistory.GetHistory(1234);
+            var history = ChatHistory.GetHistory(chatId);
 
             var llmRequest = new LlmRequest
             {
