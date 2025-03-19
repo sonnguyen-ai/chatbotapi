@@ -5,6 +5,8 @@ using chatminimalapi.DTOs;
 using System.Dynamic;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
+using System.Net;
+using Newtonsoft.Json;
 
 namespace TelegramBotBackend.Controllers
 {
@@ -19,9 +21,9 @@ namespace TelegramBotBackend.Controllers
         private readonly TelemetryClient _telemetryClient;
 
         public TelegramController(
-            ITelegramBotClient botClient, 
-            IHttpClientFactory httpClientFactory, 
-            IConfiguration configuration, 
+            ITelegramBotClient botClient,
+            IHttpClientFactory httpClientFactory,
+            IConfiguration configuration,
             SettingProvider provider,
             TelemetryClient telemetryClient)
         {
@@ -59,8 +61,35 @@ namespace TelegramBotBackend.Controllers
             // Log as a custom event
             _telemetryClient.TrackEvent("TelegramMessageReceived", properties);
 
-            
-            return Ok();
+            // Process the message using the LLM API
+            // var response = await GetLlmResponse(userMessage);
+
+            //send to bot
+            try
+            {
+                var response = await _botClient.SendMessage(chatId, "Hello from the bot!");
+                //log information for response
+
+                _telemetryClient.TrackEvent("TelegramMessageSent", new Dictionary<string,string>{
+                    { "Payload", JsonConvert.SerializeObject(response) },
+                });
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                //log ex and trace
+                var newproperties = new Dictionary<string, string>{
+                    { "Exception", ex.Message },
+                    { "StackTrace", ex.StackTrace },
+                };
+                _telemetryClient.TrackException(ex, newproperties);
+                return BadRequest(ex.Message);
+            }
+
+
+
+
         }
 
         private async Task<string> GetLlmResponse(string message)
