@@ -40,12 +40,12 @@ namespace TelegramBotBackend.Controllers
             string userMessage = update.Message.Text;
             long chatId = update.Message.Chat.Id;
 
-            // Send message to LLM API
-            string llmResponse = $"hello from backend, you said _{userMessage}_";
+
 
             // _=await GetLlmResponse(llmResponse);
             // Send response back to Telegram
-            await _botClient.SendMessage(chatId, llmResponse);
+
+            await _botClient.SendTextMessageAsync(chatId, $"You said: {userMessage}");
 
             return Ok();
         }
