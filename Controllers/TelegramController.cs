@@ -64,7 +64,7 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await GetLlmResponse(userMessage);
+                var messageToBot = await GetLlmResponse(userMessage, chatId);
 
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
@@ -87,7 +87,7 @@ namespace TelegramBotBackend.Controllers
             }
         }
 
-        private async Task<string> GetLlmResponse(string message)
+        private async Task<string> GetLlmResponse(string message, long chatId)
         {
             var tenantId = "voiz";
             //setting by tenantId
@@ -101,7 +101,7 @@ namespace TelegramBotBackend.Controllers
             var instruction = setting.Configuration.instruction;
             var client = _httpClientFactory.CreateClient();
 
-            ChatHistory.AddMessage(1234, new ChatMessage
+            ChatHistory.AddMessage(chatId, new ChatMessage
             {
                 Content = message,
                 Timestamp = DateTime.Now,
