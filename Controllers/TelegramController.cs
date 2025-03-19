@@ -67,7 +67,9 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var response = await _botClient.SendMessage(chatId, "Hello from the bot!");
+                var messageToBot = await GetLlmResponse(userMessage);
+
+                var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
 
                 _telemetryClient.TrackEvent("TelegramMessageSent", new Dictionary<string,string>{
@@ -86,10 +88,6 @@ namespace TelegramBotBackend.Controllers
                 _telemetryClient.TrackException(ex, newproperties);
                 return BadRequest(ex.Message);
             }
-
-
-
-
         }
 
         private async Task<string> GetLlmResponse(string message)
@@ -114,23 +112,11 @@ namespace TelegramBotBackend.Controllers
 
             // Forward the POST request to the backend service
             var response = await client.PostAsync(postUrl, requestContent);
-            var responseContent = await response.Content.ReadAsStringAsync();
-
-            // var client = _httpClientFactory.CreateClient();
-            // var llmUrl = _configuration["LlmApi:Url"];
-            // var requestBody = new { message }; // Adjust based on your LLM API requirements
-
-            // var response = await client.PostAsJsonAsync(llmUrl, requestBody);
-            // response.EnsureSuccessStatusCode();
-
-            var result = await response.Content.ReadFromJsonAsync<LlmResponse>();
-            return result?.Response ?? "Sorry, something went wrong.";
+            if (!response.IsSuccessStatusCode)
+                return "Error getting LLM response";
+    
+            var llmApiResponses = JsonConvert.DeserializeObject<LlmApiResponse>(await response.Content.ReadAsStringAsync());
+            return llmApiResponses.Candidates[0].Content.Parts[0].Text;
         }
-    }
-
-    // Class to deserialize LLM API response (adjust based on your API)
-    public class LlmResponse
-    {
-        public string Response { get; set; }
     }
 }
