@@ -43,7 +43,7 @@ namespace TelegramBotBackend.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update)
+        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, string tenantId)
         {
             if (update?.Message?.Text == null || update.Message.Id == 0)
                 return Ok(); // Ignore invalid updates
@@ -64,7 +64,7 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await GetLlmResponse(userMessage, chatId);
+                var messageToBot = await GetLlmResponse(userMessage, chatId, tenantId);
 
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
@@ -87,9 +87,8 @@ namespace TelegramBotBackend.Controllers
             }
         }
 
-        private async Task<string> GetLlmResponse(string message, long chatId)
+        private async Task<string> GetLlmResponse(string message, long chatId, string tenantId)
         {
-            var tenantId = "voiz";
             //setting by tenantId
             var setting = _provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
 
