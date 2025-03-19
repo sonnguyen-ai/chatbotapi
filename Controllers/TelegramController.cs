@@ -43,10 +43,14 @@ namespace TelegramBotBackend.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, [FromQuery] string tenantId, [FromQuery] string botKey)
+        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, [FromQuery] string tenantId)
         {
             if (update?.Message?.Text == null || update.Message.Id == 0)
                 return Ok(); // Ignore invalid updates
+
+            var informationKeyParam = tenantId.Split('-');
+
+            string botKey = informationKeyParam[1]; // Extract botKey from tenantId
 
             string userMessage = update.Message.Text;
             long chatId = update.Message.Chat.Id;
@@ -66,7 +70,7 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await GetLlmResponse(userMessage, chatId, tenantId, botKey);
+                var messageToBot = await GetLlmResponse(userMessage, chatId, informationKeyParam[0], botKey);
 
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
