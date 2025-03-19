@@ -43,7 +43,7 @@ namespace TelegramBotBackend.Controllers
 
 
         [HttpPost]
-        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, string tenantId)
+        public async Task<IActionResult> HandleUpdate([FromBody] TelegramUpdate update, string tenantId, string botKey)
         {
             if (update?.Message?.Text == null || update.Message.Id == 0)
                 return Ok(); // Ignore invalid updates
@@ -56,6 +56,8 @@ namespace TelegramBotBackend.Controllers
             {
                 { "ChatId", chatId.ToString() },
                 { "UserMessage", userMessage },
+                { "TenantId", tenantId },
+                { "BotKey", botKey }
             };
 
             // Log as a custom event
@@ -64,7 +66,7 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await GetLlmResponse(userMessage, chatId, tenantId);
+                var messageToBot = await GetLlmResponse(userMessage, chatId, tenantId, botKey);
 
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
@@ -87,7 +89,7 @@ namespace TelegramBotBackend.Controllers
             }
         }
 
-        private async Task<string> GetLlmResponse(string message, long chatId, string tenantId)
+        private async Task<string> GetLlmResponse(string message, long chatId, string tenantId, string botKey)
         {
             //setting by tenantId
             var setting = _provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
@@ -95,7 +97,7 @@ namespace TelegramBotBackend.Controllers
             var baseUrl = setting.Configuration.BaseUrl;
             var url = setting.Configuration.Url;
             var model = setting.Configuration.Model;
-            var key = setting.Configuration.Key;
+            var key = botKey;
             var prompt = setting.Configuration.Prompt;
             var instruction = setting.Configuration.instruction;
             var client = _httpClientFactory.CreateClient();
