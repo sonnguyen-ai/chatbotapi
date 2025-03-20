@@ -20,7 +20,7 @@ namespace TelegramBotBackend.Services
                 string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
 
             if (setting == null)
-                throw new ArgumentException("Setting not found for tenant", nameof(tenantId));
+                throw new ArgumentException("Setting not found for tenant" + tenantId, nameof(tenantId));
 
             var baseUrl = setting.Configuration.BaseUrl;
             var url = setting.Configuration.Url;
