@@ -46,8 +46,9 @@ namespace TelegramBotBackend.Controllers
                 return Ok(); // Ignore invalid updates
 
             var informationKeyParam = tenantId.Split('-');
-            string botKey = informationKeyParam[1]; // Extract botKey from tenantId
-            string userMessage = update.Message.Text;
+            var botKey = informationKeyParam[1]; // Extract botKey from tenantId
+            var companyId = informationKeyParam[0]; // Extract companyId from tenantId
+            var userMessage = update.Message.Text;
             long chatId = update.Message.Chat.Id;
             var client = _httpClientFactory.CreateClient();
 
@@ -66,7 +67,7 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await _llmService.GetResponseAsync(userMessage, chatId, tenantId);
+                var messageToBot = await _llmService.GetResponseAsync(userMessage, chatId, companyId);
 
                 var _botClient = new TelegramBotClient(botKey, client);
 
