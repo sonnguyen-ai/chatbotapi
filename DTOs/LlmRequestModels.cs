@@ -4,6 +4,8 @@ namespace chatminimalapi.DTOs;
 
 public class LlmRequest
 {
+    [JsonProperty("system_instruction")]
+    public SystemInstruction SystemInstruction { get; set; }
     [JsonProperty("contents")]
     public List<Content> Contents { get; set; }
 
@@ -12,6 +14,12 @@ public class LlmRequest
 
     [JsonProperty("generationConfig")]
     public GenerationConfig GenerationConfig { get; set; }
+}
+
+public class SystemInstruction
+{
+    [JsonProperty("parts")]
+    public List<Part> Parts { get; set; }
 }
 
 public class SafetySetting
