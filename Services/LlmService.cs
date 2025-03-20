@@ -16,7 +16,7 @@ namespace TelegramBotBackend.Services
 
         public async Task<string> GetResponseAsync(string message, long chatId, string tenantId)
         {
-            var setting = _provider.settings.Find(s => 
+            var setting = _provider.settings.Find(s =>
                 string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
 
             if (setting == null)
@@ -56,7 +56,7 @@ namespace TelegramBotBackend.Services
 
             var llmApiResponses = JsonConvert.DeserializeObject<LlmApiResponse>(
                 await response.Content.ReadAsStringAsync());
-            
+
             return llmApiResponses.Candidates[0].Content.Parts[0].Text;
         }
 
@@ -64,19 +64,11 @@ namespace TelegramBotBackend.Services
         {
             var request = new LlmRequest
             {
-                Contents = new List<Content>
+                SystemInstruction = new SystemInstruction()
                 {
-                    new Content
-                    {
-                        Parts = new List<Part> { new Part { Text = instruction } },
-                        Role = "model"
-                    },
-                    new Content
-                    {
-                        Parts = new List<Part> { new Part { Text = prompt } },
-                        Role = "model"
-                    }
+                    Parts = new List<Part> { new Part { Text = instruction }, new Part { Text = prompt } },
                 },
+                Contents = new List<Content>(),
                 SafetySettings = new List<SafetySetting>
                 {
                     new SafetySetting { Category = "HARM_CATEGORY_HARASSMENT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
