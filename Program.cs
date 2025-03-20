@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.Azure.Cosmos;
 using Microsoft.OpenApi.Models;
 using Telegram.Bot;
+using TelegramBotBackend.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 string databaseId = builder.Configuration["CosmosDB:DatabaseId"];
@@ -66,6 +67,7 @@ builder.Services.AddSingleton<ISettingsRepository>(sp =>
 });
 
 builder.Services.AddControllers();
+builder.Services.AddScoped<ILlmService, LlmService>();
 
 // Register the SettingProvider
 builder.Services.AddSingleton(sp =>
@@ -79,8 +81,6 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddHttpClient();
 builder.Services.AddApplicationInsightsTelemetry();
 
-builder.Services.AddSingleton<ITelegramBotClient>(sp =>
-    new TelegramBotClient(builder.Configuration["TelegramBot:Token"]));
 
 var app = builder.Build();
 
