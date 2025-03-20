@@ -1,12 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using Telegram.Bot;
-using Telegram.Bot.Types;
 using chatminimalapi.DTOs;
-using System.Dynamic;
 using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.DataContracts;
-using System.Net;
 using Newtonsoft.Json;
+using TelegramBotBackend.Services;
 
 namespace TelegramBotBackend.Controllers
 {
@@ -18,17 +15,20 @@ namespace TelegramBotBackend.Controllers
         private readonly IConfiguration _configuration;
         private readonly SettingProvider _provider;
         private readonly TelemetryClient _telemetryClient;
+        private readonly ILlmService _llmService;
 
         public TelegramController(
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
             SettingProvider provider,
-            TelemetryClient telemetryClient)
+            TelemetryClient telemetryClient,
+            ILlmService llmService)
         {
             _httpClientFactory = httpClientFactory;
             _configuration = configuration;
             _provider = provider;
             _telemetryClient = telemetryClient;
+            _llmService = llmService;
         }
 
         //create ping
@@ -46,11 +46,10 @@ namespace TelegramBotBackend.Controllers
                 return Ok(); // Ignore invalid updates
 
             var informationKeyParam = tenantId.Split('-');
-
             string botKey = informationKeyParam[1]; // Extract botKey from tenantId
-
             string userMessage = update.Message.Text;
             long chatId = update.Message.Chat.Id;
+            var client = _httpClientFactory.CreateClient();
 
             // Log the incoming message to Azure Application Insights
             var properties = new Dictionary<string, string>
@@ -67,9 +66,9 @@ namespace TelegramBotBackend.Controllers
             //send to bot
             try
             {
-                var messageToBot = await GetLlmResponse(userMessage, chatId, informationKeyParam[0], botKey);
+                var messageToBot = await _llmService.GetResponseAsync(userMessage, chatId, tenantId);
 
-                var _botClient = new TelegramBotClient(botKey);
+                var _botClient = new TelegramBotClient(botKey, client);
 
                 var response = await _botClient.SendMessage(chatId, messageToBot);
                 //log information for response
@@ -90,85 +89,6 @@ namespace TelegramBotBackend.Controllers
                 _telemetryClient.TrackException(ex, newproperties);
                 return BadRequest(ex.Message);
             }
-        }
-
-        private async Task<string> GetLlmResponse(string message, long chatId, string tenantId, string botKey)
-        {
-            //setting by tenantId
-            var setting = _provider.settings.Find(s => string.Equals(s.TenantId, tenantId, StringComparison.OrdinalIgnoreCase));
-
-            var baseUrl = setting.Configuration.BaseUrl;
-            var url = setting.Configuration.Url;
-            var model = setting.Configuration.Model;
-            var key = setting.Configuration.Key;
-            var prompt = setting.Configuration.Prompt;
-            var instruction = setting.Configuration.instruction;
-            var client = _httpClientFactory.CreateClient();
-
-            ChatHistory.AddMessage(chatId, new ChatMessage
-            {
-                Content = message,
-                Timestamp = DateTime.Now,
-                Role = "user"
-            });
-
-            var history = ChatHistory.GetHistory(chatId);
-
-            var llmRequest = new LlmRequest
-            {
-                Contents = new List<Content>
-                {
-                    new Content
-                    {
-                        Parts = new List<Part> { new Part { Text = instruction } },
-                        Role = "model"
-                    },
-                    new Content
-                    {
-                        Parts = new List<Part> { new Part { Text = prompt } },
-                        Role = "model"
-                    }
-                },
-                SafetySettings = new List<SafetySetting>
-                {
-                    new SafetySetting { Category = "HARM_CATEGORY_HARASSMENT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
-                    new SafetySetting { Category = "HARM_CATEGORY_HATE_SPEECH", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
-                    new SafetySetting { Category = "HARM_CATEGORY_SEXUALLY_EXPLICIT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" },
-                    new SafetySetting { Category = "HARM_CATEGORY_DANGEROUS_CONTENT", Threshold = "BLOCK_MEDIUM_AND_ABOVE" }
-                },
-                GenerationConfig = new GenerationConfig
-                {
-                    MaxOutputTokens = 300,
-                    Temperature = 0.7,
-                    TopK = 1,
-                    TopP = 0.8
-                }
-            };
-
-            history.ForEach(x =>
-            {
-                llmRequest.Contents.Add(new Content
-                {
-                    Parts = new List<Part> { new Part { Text = x.Content } },
-                    Role = x.Role
-                });
-            });
-
-            var stringObj = JsonConvert.SerializeObject(llmRequest, new JsonSerializerSettings
-            {
-                ContractResolver = new Newtonsoft.Json.Serialization.CamelCasePropertyNamesContractResolver()
-            });
-
-            var requestContent = new StringContent(stringObj, System.Text.Encoding.UTF8, Request.ContentType);
-            var postUrl = $"{baseUrl}{url}".Replace("{0}", model).Replace("{1}", key);
-
-            // Forward the POST request to the backend service
-            var response = await client.PostAsync(postUrl, requestContent);
-            if (!response.IsSuccessStatusCode)
-                return "Error getting LLM response";
-
-            var llmApiResponses = JsonConvert.DeserializeObject<LlmApiResponse>(await response.Content.ReadAsStringAsync());
-            return llmApiResponses.Candidates[0].Content.Parts[0].Text;
         }
     }
 }
